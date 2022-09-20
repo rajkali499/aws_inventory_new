@@ -1,28 +1,33 @@
 """Abstraction for invoking AWS APIs (a.k.a. operations) and handling responses."""
 
 import logging
-from Queue import Queue
+from queue import Queue
 from threading import Thread
 
 import botocore
+import botocore.config
+import botocore.exceptions
+import botocore.session
 from opinel.utils.credentials import read_creds
 
-import config
-import progress
-import store
+import aws_inventory.config as config
+import aws_inventory.progress as progress
+import aws_inventory.store as store
 
 
 LOGGER = logging.getLogger(__name__)
 
+
 class ApiInvoker(object):
     """Invoke APIs from GUI."""
 
-    def __init__(self, script_args, svc_descriptors, ops_count):
+    def __init__(self, script_args, svc_descriptors, ops_count, display_type):
         self.script_args = script_args
         self.svc_descriptors = svc_descriptors
         self.ops_count = ops_count
         self.progress_bar = None
         self.store = store.ResultStore(script_args.profile)
+        self.display_type = display_type
 
         # search for AWS credentials
         # using opinel allows us to use MFA and a CSV file. Otherwise, we could just use
@@ -38,10 +43,20 @@ class ApiInvoker(object):
 
     def start(self):
         """Start the invoker with associated GUI. Wait for GUI to stop."""
-        self.progress_bar = progress.GuiProgressBar(
-            'AWS Inventory',
-            self.ops_count,
-            self._probe_services)
+        if self.display_type == 'cmd':
+            self.progress_bar = progress.TQDMProgressBar(
+                'AWS Inventory',
+                self.ops_count,
+                self._probe_services
+            )
+        elif self.display_type == 'gui':
+            self.progress_bar = progress.GuiProgressBar(
+                'AWS Inventory',
+                self.ops_count,
+                self._probe_services)
+        else:
+            raise ValueError('Incorrect setting for self.display_type')
+
         self.progress_bar.mainloop()
 
     def _probe_services(self):
@@ -122,7 +137,7 @@ class ApiInvoker(object):
                     self.store.dump_exception_store(out_fp)
 
             if self.script_args.verbose:
-                print self.store.get_response_store()
+                print(self.store.get_response_store())
 
             if gui_data_fp:
                 self.store.generate_data_file(gui_data_fp)
@@ -172,7 +187,8 @@ class ApiInvoker(object):
             finally:
                 que.task_done()
 
-#XXX: borrowed from opinel because their threading module is failing to load. Pretty much the example in the Queue docs
+
+# XXX: borrowed from opinel because their threading module is failing to load. Pretty much the example in the Queue docs
 def thread_work(targets, function, params=None):
     """Thread worker creator.
 

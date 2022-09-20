@@ -2,14 +2,38 @@
 
 import collections
 import threading
-import Tkinter as tk
-import tkMessageBox
-import ttk
+import tkinter as tk
+import tkinter.messagebox as messagebox
+import tkinter.ttk as ttk
+import tqdm
 
 
 class LifetimeError(Exception):
     """Progress was interrupted (i.e., window closed or cancel button was pressed)."""
     pass
+
+
+class TQDMProgressBar:
+    def __init__(self, title, work_count, work_func, *func_args):
+        self.work_count = work_count
+        self.worker_task = threading.Thread(target=work_func, args=func_args)
+        self.bar = tqdm.tqdm(total=work_count)
+
+    def __del__(self):
+        self.bar.close()
+
+    def mainloop(self):
+        self.worker_task.start()
+
+    def update_progress(self, delta):
+        self.bar.update(delta)
+
+    def update_svc_text(self, svc_name, region):
+        pass
+
+    def finish_work(self):
+        pass
+
 
 class GuiProgressBar(ttk.Frame):
     def __init__(self, title, work_count, work_func, *func_args):
@@ -46,8 +70,7 @@ class GuiProgressBar(ttk.Frame):
         label = ttk.Label(label_frame, anchor='w', textvariable=label_text)
         label.pack(fill='x')
 
-
-        #XXX: add small fraction to max so progress bar doesn't wrap when work finishes
+        # XXX: add small fraction to max so progress bar doesn't wrap when work finishes
         progress_bar = ttk.Progressbar(
             self,
             orient='horizontal',
@@ -71,12 +94,12 @@ class GuiProgressBar(ttk.Frame):
                             status_label)
 
     def _confirm_quit(self):
-        if tkMessageBox.askyesno(message='Quit?'):
+        if messagebox.askyesno(message='Quit?'):
             self.pending_stop = True
             self.master.destroy()
 
     def _confirm_cancel(self):
-        if tkMessageBox.askyesno(message='Cancel?'):
+        if messagebox.askyesno(message='Cancel?'):
             self.pending_stop = True
             self.widget_space.button_text.set('Canceled')
             self.widget_space.button.state(['disabled'])
